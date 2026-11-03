@@ -60,19 +60,31 @@ jobs:
           clang --version | head -1
           ls -1 /usr/bin/llvm-ar* /usr/bin/llvm-strip* 2>/dev/null | head
 
+      - name: Cache theos (toolchain + SDK, ~1.5 GB)
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.THEOS }}
+          key: theos-iPhoneOS16.5-ld64-${{ hashFiles('.github/workflows/build.yml') }}
+
       - name: theos and its Linux cctools (ld64, nm, install_name_tool)
         run: |
+          if [ -x "$THEOS/toolchain/linux/iphone/bin/ld" ]; then
+            echo "cached"; exit 0
+          fi
           git clone -q --depth 1 https://github.com/theos/theos.git "$THEOS"
           mkdir -p "$THEOS/toolchain"
           curl -fsSL --retry 5 "$TOOLCHAIN_URL" | tar -xJf - -C "$THEOS/toolchain/"
           ls "$THEOS/toolchain/linux/iphone/bin" | head -30
           test -x "$THEOS/toolchain/linux/iphone/bin/ld"
-          "$THEOS/toolchain/linux/iphone/bin/ld" -v 2>&1 | head -2 || true
 
       - name: iPhoneOS 16.5 SDK (theos/sdks, sparse ~220 MB)
         run: |
-          git clone -q --depth 1 --filter=blob:none --sparse https://github.com/theos/sdks.git "$THEOS/sdks-git"
-          git -C "$THEOS/sdks-git" sparse-checkout set iPhoneOS16.5.sdk
+          if [ -f "$THEOS/sdks-git/iPhoneOS16.5.sdk/usr/include/stdio.h" ]; then
+            echo "cached"
+          else
+            git clone -q --depth 1 --filter=blob:none --sparse https://github.com/theos/sdks.git "$THEOS/sdks-git"
+            git -C "$THEOS/sdks-git" sparse-checkout set iPhoneOS16.5.sdk
+          fi
           mkdir -p "$THEOS/sdks"
           ln -sfn "$THEOS/sdks-git/iPhoneOS16.5.sdk" "$THEOS/sdks/iPhoneOS16.5.sdk"
           du -sh "$THEOS/sdks-git/iPhoneOS16.5.sdk"
@@ -116,6 +128,8 @@ jobs:
             build.log
             work/meson-setup.log
             work/ninja.log
+            work/build-softpipe/meson-logs/meson-log.txt
+            work/build-softpipe/meson-info/*.json
           if-no-files-found: warn
 
       - name: Upload dylibs
