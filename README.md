@@ -22,6 +22,20 @@ uses the OpenGL ES path when an `EAGLContext` implementation is present, and
 `/redwood/lib/libOSMesa.8.dylib`; ship both at that path (or edit the load
 command).
 
+## Status
+
+Built and verified on 2026-11-04 (run
+[41669314311](https://github.com/2myh120405/ios-sweet-mesa/actions/runs/41669314311),
+artifact `mesa-ios-softpipe`):
+
+* `libOSMesa.8.dylib` 13,057,796 B — Mach-O arm64, `LC_BUILD_VERSION ios 16.5`,
+  install name `/redwood/lib/libOSMesa.8.dylib`, 1,296 `gl*` exports, `NOUNDEFS`
+* `libhakios.gl.dylib` 525,568 B — same platform; loads
+  `/redwood/lib/libOSMesa.8.dylib`, CoreFoundation, IOKit, IOSurface, libobjc
+
+Not yet run on a device. softpipe is a CPU rasterizer: correctness first, speed
+unknown (the reference prefers freedreno when the kernel has a GPU driver).
+
 ## How it is built (no macOS runner)
 
 * Ubuntu 24.04, stock `clang` targeting `arm64-apple-ios16.5`
