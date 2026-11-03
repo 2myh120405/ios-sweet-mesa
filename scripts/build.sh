@@ -73,7 +73,7 @@ case "\$(basename "\$0")" in
 	*++) drv="$CLANGXX" ;;
 	*)   drv="$CLANG" ;;
 esac
-exec "\$drv" -target "$TARGET" -isysroot "$SDK" --ld-path="$CCTOOLS/ld" "\$@"
+exec "\$drv" -target "$TARGET" -isysroot "$SDK" -Wno-unused-command-line-argument --ld-path="$CCTOOLS/ld" "\$@"
 EOF
 chmod +x "$WORK/apple-clang"
 ln -sf "$WORK/apple-clang" "$WORK/apple-clang++"
