@@ -36,6 +36,7 @@ env:
   # pinned, same toolchain the xnu-linux workflow uses (ld64, nm, install_name_tool)
   TOOLCHAIN_URL: https://github.com/L1ghtmann/llvm-project/releases/download/test-210562a/iOSToolchain-x86_64.tar.xz
   DRIVERS: ${{ inputs.drivers || 'softpipe' }}
+  MESON_DEBUG: "1"
 
 jobs:
   build:

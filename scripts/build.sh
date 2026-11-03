@@ -78,6 +78,16 @@ EOF
 chmod +x "$WORK/apple-clang"
 ln -sf "$WORK/apple-clang" "$WORK/apple-clang++"
 
+# Cheap probes, so a configure mysterry is visible in build.log without --debug.
+printf 'int main(void) { return 0; }\n' > "$WORK/probe.c"
+log "probe: -Werror compile"
+"$WORK/apple-clang" -Werror -c "$WORK/probe.c" -o "$WORK/probe.o" 2>&1 || true
+log "probe: preprocess dlfcn.h"
+printf '#include <dlfcn.h>\n' > "$WORK/probe_dl.c"
+"$WORK/apple-clang" -E -x c "$WORK/probe_dl.c" -o /dev/null 2>&1 || true
+log "probe: link a trivial main"
+"$WORK/apple-clang" -Werror "$WORK/probe.c" -o "$WORK/probe" 2>&1 | tail -5 || true
+
 # ------------------------------------------------------------- Mesa sources
 if [ ! -f "mesa-$VERSION.tar.xz" ]; then
 	log "downloading mesa-$VERSION.tar.xz"
@@ -148,6 +158,7 @@ fi
 if [ ! -f "$BUILD/build.ninja" ]; then
 	log "meson setup ($BUILD)"
 	meson setup "$BUILD" "mesa-$VERSION" --cross-file cross.ini --wrap-mode=nofallback \
+		${MESON_DEBUG:+--debug} \
 		--prefix=/redwood --libdir=lib --buildtype=release -Db_ndebug=true \
 		-Dplatforms= -Dgallium-drivers="$DRIVERS" "${EXTRA[@]}" \
 		-Dvulkan-drivers= -Dglx=disabled -Degl=disabled -Dgbm=disabled \
