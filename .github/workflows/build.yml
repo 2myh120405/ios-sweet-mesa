@@ -1,0 +1,130 @@
+name: mesa-ios
+
+# Build Mesa 25.0.7 + the EAGL shim for arm64 iOS on an Ubuntu runner.
+# No macOS runner: clang (Ubuntu) targets arm64-apple-ios, theos' cctools
+# (ld64) links, and theos/sdks supplies iPhoneOS16.5.sdk.
+#
+# Artifacts:
+#   libOSMesa.8.dylib    Mesa: software rasterizer (softpipe) + OSMesa with an
+#                        OpenGL ES profile, install name /redwood/lib/libOSMesa.8.dylib
+#   libhakios.gl.dylib   EAGLContext replaced by eagl.c over OSMesa
+#   exported-gl.txt      the gl* functions libOSMesa exports
+#   gl.xml               Khronos registry from that Mesa tree
+
+on:
+  workflow_dispatch:
+    inputs:
+      drivers:
+        description: "gallium drivers"
+        type: choice
+        options: [softpipe, "softpipe,freedreno"]
+        default: softpipe
+  push:
+    branches: [main]
+    paths:
+      - "scripts/**"
+      - "gl/**"
+      - "patches/**"
+      - ".github/workflows/build.yml"
+
+concurrency:
+  group: mesa-ios-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  THEOS: ${{ github.workspace }}/theos
+  # pinned, same toolchain the xnu-linux workflow uses (ld64, nm, install_name_tool)
+  TOOLCHAIN_URL: https://github.com/L1ghtmann/llvm-project/releases/download/test-210562a/iOSToolchain-x86_64.tar.xz
+  DRIVERS: ${{ inputs.drivers || 'softpipe' }}
+
+jobs:
+  build:
+    name: mesa (ubuntu, ${{ inputs.drivers || 'softpipe' }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL || true
+          df -h /
+
+      - name: Packages
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang lld llvm flex bison m4 perl python3 python3-venv \
+            ninja-build pkg-config curl xz-utils git build-essential file jq ca-certificates
+          clang --version | head -1
+          ls -1 /usr/bin/llvm-ar* /usr/bin/llvm-strip* 2>/dev/null | head
+
+      - name: theos and its Linux cctools (ld64, nm, install_name_tool)
+        run: |
+          git clone -q --depth 1 https://github.com/theos/theos.git "$THEOS"
+          mkdir -p "$THEOS/toolchain"
+          curl -fsSL --retry 5 "$TOOLCHAIN_URL" | tar -xJf - -C "$THEOS/toolchain/"
+          ls "$THEOS/toolchain/linux/iphone/bin" | head -30
+          test -x "$THEOS/toolchain/linux/iphone/bin/ld"
+          "$THEOS/toolchain/linux/iphone/bin/ld" -v 2>&1 | head -2 || true
+
+      - name: iPhoneOS 16.5 SDK (theos/sdks, sparse ~220 MB)
+        run: |
+          git clone -q --depth 1 --filter=blob:none --sparse https://github.com/theos/sdks.git "$THEOS/sdks-git"
+          git -C "$THEOS/sdks-git" sparse-checkout set iPhoneOS16.5.sdk
+          mkdir -p "$THEOS/sdks"
+          ln -sfn "$THEOS/sdks-git/iPhoneOS16.5.sdk" "$THEOS/sdks/iPhoneOS16.5.sdk"
+          du -sh "$THEOS/sdks-git/iPhoneOS16.5.sdk"
+          test -f "$THEOS/sdks/iPhoneOS16.5.sdk/usr/include/stdio.h"
+          test -f "$THEOS/sdks/iPhoneOS16.5.sdk/usr/lib/libSystem.tbd"
+          ls "$THEOS/sdks/iPhoneOS16.5.sdk/System/Library/Frameworks" | head -20
+
+      - name: meson (venv; Mesa needs >= 1.4)
+        run: |
+          python3 -m venv "$RUNNER_TEMP/py"
+          "$RUNNER_TEMP/py/bin/pip" install -q --upgrade pip
+          "$RUNNER_TEMP/py/bin/pip" install -q meson mako pyyaml packaging
+          echo "$RUNNER_TEMP/py/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/py/bin/meson" --version
+
+      - name: Build
+        run: |
+          set -o pipefail
+          bash scripts/build.sh 2>&1 | tee build.log
+
+      - name: Inspect outputs
+        if: always()
+        run: |
+          for f in out/*.dylib; do
+            [ -f "$f" ] || continue
+            echo "== $f ($(stat -c %s "$f") bytes)"
+            file "$f"
+            if [ -x "$THEOS/toolchain/linux/iphone/bin/otool" ]; then
+              "$THEOS/toolchain/linux/iphone/bin/otool" -h "$f" 2>/dev/null | head -8 || true
+              "$THEOS/toolchain/linux/iphone/bin/otool" -l "$f" 2>/dev/null | grep -A3 -E 'LC_ID_DYLIB|LC_BUILD_VERSION|LC_VERSION_MIN' | head -20 || true
+            fi
+          done
+          echo "== gl exports: $(wc -l < out/exported-gl.txt 2>/dev/null || echo 0)"
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-${{ inputs.drivers || 'softpipe' }}
+          path: |
+            build.log
+            work/meson-setup.log
+            work/ninja.log
+          if-no-files-found: warn
+
+      - name: Upload dylibs
+        uses: actions/upload-artifact@v4
+        with:
+          name: mesa-ios-${{ inputs.drivers || 'softpipe' }}
+          path: |
+            out/libOSMesa.8.dylib
+            out/libhakios.gl.dylib
+            out/exported-gl.txt
+            out/gl.xml
+            out/BUILD-INFO.txt
+          if-no-files-found: error
