@@ -33,6 +33,11 @@ artifact `mesa-ios-softpipe`):
 * `libhakios.gl.dylib` 525,568 B — same platform; loads
   `/redwood/lib/libOSMesa.8.dylib`, CoreFoundation, IOKit, IOSurface, libobjc
 
+The reference-exact variant (`drivers=softpipe,freedreno`, run
+[41670826492](https://github.com/2myh120405/ios-sweet-mesa/actions/runs/41670826492))
+also builds: `libOSMesa.8.dylib` 14,822,264 B, same exports plus IOKit
+(hakios-drm); it falls back to softpipe when the kernel has no GPU service.
+
 Not yet run on a device. softpipe is a CPU rasterizer: correctness first, speed
 unknown (the reference prefers freedreno when the kernel has a GPU driver).
 
