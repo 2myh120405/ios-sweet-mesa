@@ -129,6 +129,14 @@ endian = 'little'
 
 [properties]
 needs_exe_wrapper = true
+
+# meson's has_header_symbol('time.h', 'struct timespec') answers NO for the
+# iPhoneOS SDK (it compiles "(void) struct timespec;", which clang rejects for a
+# complete type), so Mesa would define struct timespec itself and clash with
+# sys/_types/_timespec.h.  Apple's SDK has it; say so.
+[built-in options]
+c_args = ['-DHAVE_STRUCT_TIMESPEC']
+cpp_args = ['-DHAVE_STRUCT_TIMESPEC']
 EOF
 
 BUILD="build-${DRIVERS//,/-}"
